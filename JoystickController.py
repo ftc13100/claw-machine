@@ -36,7 +36,7 @@ class JoystickController:
                 self.lastValues[channel] = value
                 return value
             except OSError:
-                time.sleep(0.005)
+                pass
         
         if channel in self.lastValues:
             return self.lastValues[channel]
