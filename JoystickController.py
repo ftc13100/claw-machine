@@ -3,7 +3,7 @@ import RPi.GPIO as GPIO
 from smbus2 import SMBus
 
 class JoystickController:
-    def __init__(self, switchPin=18, xChannel=1, yChannel=0, deadzone=0.1, busNumber=1, address=0x4b):
+    def __init__(self, switchPin=4, xChannel=1, yChannel=0, deadzone=0.1, busNumber=1, address=0x4b):
         self.switchPin = switchPin
         self.xChannel = xChannel
         self.yChannel = yChannel
@@ -84,23 +84,3 @@ class JoystickController:
     def __exit__(self, excType, exc, tb):
         self.bus.close()
         GPIO.cleanup(self.switchPin)
-
-
-def main():
-    with JoystickController() as joystick:
-        lastState = None
-        try:
-            while True:
-                state = joystick.readAll()
-                if state != lastState:
-                    x, y, pressed = state
-                    print(f"x={x:+.2f}  y={y:+.2f}  pressed={pressed}")
-                    lastState = state
-
-                time.sleep(0.02)
-        except KeyboardInterrupt:
-            print("\nProgram Killed")
-
-
-if __name__ == "__main__":
-    main()

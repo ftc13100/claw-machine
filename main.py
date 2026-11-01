@@ -1,18 +1,12 @@
-from BuzzerController import BuzzerController
 from JoystickController import JoystickController
+from DisplayManager import DisplayManager
 import time
 
-with JoystickController() as joystick, BuzzerController() as buzzer:
-    print("Buzzer Test")
-    for frequency in (262, 330, 392, 523):
-        buzzer.playTone(frequency)
-        time.sleep(0.25)
-        buzzer.off()
-
+with JoystickController() as joystick, DisplayManager() as display:
     try:
         while True:
             x, y, z  = joystick.readAll()
-            print(f"({x}, {y}) | Pressed: {z}")
+            display.showText(f"{x}, {y}", fontSize=18)
             time.sleep(0.05)
     except KeyboardInterrupt:
         print("\nProgram Killed")
