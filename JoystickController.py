@@ -67,10 +67,10 @@ class JoystickController:
         return round(max(-1.0, min(1.0, result)), 2)
 
     def readX(self):
-        return self.normalize(self.readChannel(self.xChannel), self.xCenter)
+        return -self.normalize(self.readChannel(self.xChannel), self.xCenter)
 
     def readY(self):
-        return self.normalize(self.readChannel(self.yChannel), self.yCenter)
+        return -self.normalize(self.readChannel(self.yChannel), self.yCenter)
 
     def isPressed(self):
         return GPIO.input(self.switchPin) == GPIO.LOW
