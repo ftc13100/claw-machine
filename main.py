@@ -1,138 +1,144 @@
+# Imports
 import time
+import pigpio
 
 from JoystickController import JoystickController
-from ContinuousServoManager import ContinuousServoManager
-from ServoManager import ServoManager
+from DisplayController import DisplayController
+from ServoController import ServoController
+from ContinuousServoController import ContinuousServoController
+from LimitSwitchController import LimitSwitchController
 
-
-# GPIO assignments (BCM)
-X_SERVO_PIN = 11
-Y_SERVO_PIN = 9
+# Hardware Constants
+pi = pigpio.pi()
 
 CLAW_PIN = 10
 CLAW_LIFT_PIN = 6
 
+X_SERVO_PIN = 11
+Y_SERVO_PIN = 9
+
+X_SWITCH_PINS = [18, 27]
+Y_SWITCH_PINS = [5, 21]
+
+# Software Constants
 UPDATE_RATE = 0.02
+TICKS_TO_SECOND = 1 / UPDATE_RATE
 
+# Game Constants
+PLAY_TIME = 60
 
-def main():
+# Hardware Objects
+claw = None
+clawLift = None
 
-    joystick = None
-    x_servo = None
-    y_servo = None
-    claw = None
-    claw_lift = None
+xServo = None
+yServo = None
 
+xSwitches = None
+ySwitches = None
+
+joystick = None
+display = None
+
+def initHardware():
+    claw = ServoController(
+        servoPin=CLAW_PIN,
+        maxAngle=300,
+        startAngle=0
+    )
+
+    clawLift = ServoController(
+        servoPin=CLAW_LIFT_PIN,
+        maxAngle=300,
+        startAngle=0
+    )
+
+    xServo = ContinuousServoController(
+        servoPin=X_SERVO_PIN
+    )
+
+    yServo = ContinuousServoController(
+        servoPin=Y_SERVO_PIN
+    )
+
+    xSwitches = LimitSwitchController(pi, X_SWITCH_PINS)
+    ySwitches = LimitSwitchController(pi, Y_SWITCH_PINS)
+
+    joystick = JoystickController()
+
+    display = DisplayController()
+
+# Claw Commands
+def clawResetPos():
+    axes = {"x": [xServo, xSwitches, False], "y": [yServo, ySwitches, False]}
     try:
-        print("Initializing servos...")
-
-        # Initialize claw servos
-        claw = ServoManager(
-            servoPin=CLAW_PIN,
-            maxAngle=300,
-            startAngle=0
-        )
-
-        claw_lift = ServoManager(
-            servoPin=CLAW_LIFT_PIN,
-            maxAngle=300,
-            startAngle=0
-        )
-
-        # Initialize continuous rotation servos
-        x_servo = ContinuousServoManager(
-            servoPin=X_SERVO_PIN
-        )
-
-        y_servo = ContinuousServoManager(
-            servoPin=Y_SERVO_PIN
-        )
-
-        # Initialize joystick
-        joystick = JoystickController()
-
-        print("\nRobot ready!")
-        print("X axis: GPIO 11")
-        print("Y axis: GPIO 9")
-        print("Claw: GPIO 10")
-        print("Claw lift: GPIO 6")
-        print("Press joystick button to activate claw.\n")
-
-        button_was_pressed = False
-
-        while True:
-
-            # Read joystick
-            x, y, pressed = joystick.readAll()
-
-            # Always update drive servos
-            x_servo.setSpeed(x)
-            y_servo.setSpeed(y)
-
-            # Detect new button press
-            if pressed and not button_was_pressed:
-
-                print("\nClaw sequence started!")
-
-                # Stop movement while operating claw
-                x_servo.stop()
-                y_servo.stop()
-
-                # Move claw down
-                print("Moving claw down...")
-                claw_lift.setPosition(300)
-
-                # Wait 5 seconds
-                print("Waiting 5 seconds...")
-                time.sleep(5)
-
-                # Close claw
-                print("Closing claw...")
-                claw.setPosition(300)
-
-                time.sleep(0.5)
-
-                # Raise claw
-                print("Moving claw up...")
-                claw_lift.setPosition(0)
-
-                print("Claw sequence complete!\n")
-
-                # Prevent held button from triggering again
-                button_was_pressed = True
-
-            elif not pressed:
-                button_was_pressed = False
-
+        for servo, switches, done in axes.values():
+            servo.setSpeed(1)
+        while not all(axis[2] for axis in axes.values()):
+            for axis in axes.values():
+                servo, switches, done = axis
+                if not done and switches.pressed():
+                    servo.setSpeed(0)
+                    axis[2] = True
             time.sleep(UPDATE_RATE)
-
-    except KeyboardInterrupt:
-        print("\nStopping robot...")
-
     finally:
+        xServo.setSpeed(0)
+        yServo.setSpeed(0)
 
-        # Stop continuous servos
-        if x_servo is not None:
-            x_servo.stop()
-            x_servo.close()
+def clawUp(): clawLift.setPosition(0)
+def clawDown(): clawLift.setPosition(300)
+def clawOpen(): clawLift.setPosition(0)
+def clawClose(): clawLift.setPosition(300)
 
-        if y_servo is not None:
-            y_servo.stop()
-            y_servo.close()
+# Game Functions
+def setupGame():
+    clawLift.setPosition(0)
+    claw.setPosition(0)
+    clawResetPos()
+    display.showText("Press to play")
 
-        # Release position servos
-        if claw is not None:
-            claw.close()
+def playGame():
+    buttonPressed = False
 
-        if claw_lift is not None:
-            claw_lift.close()
+    while (not buttonPressed):
+        x, y, pressed = joystick.readAll()
+        xServo.setSpeed(-x)
+        yServo.setSpeed(y)
 
-        # Release joystick resources
-        if joystick is not None:
-            joystick.__exit__(None, None, None)
+        if (pressed):
+            xServo.stop()
+            yServo.stop()
+            
+            clawDown()
+            time.sleep(5)
+            clawClose()
+            time.sleep(0.5)
+            clawUp()
+            clawResetPos()
+            clawOpen()
 
-        print("All servos released.")
+            buttonPressed = True
 
+        time.sleep(UPDATE_RATE)
 
-if __name__ == "__main__":
-    main()
+# Main Program
+try:
+    initHardware()
+
+    while True:
+        setupGame()
+        playGame()
+
+finally:
+    # Close here means unmounting hardware
+    claw.close()
+    clawLift.close()
+
+    xServo.stop()
+    xServo.close()
+
+    yServo.stop()
+    yServo.close()
+
+    joystick.close()
+    display.close()
