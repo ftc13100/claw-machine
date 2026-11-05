@@ -41,83 +41,84 @@ joystick = None
 display = None
 
 def initHardware():
-    claw = ServoController(
-        servoPin=CLAW_PIN,
-        maxAngle=300,
-        startAngle=0
-    )
-
-    clawLift = ServoController(
-        servoPin=CLAW_LIFT_PIN,
-        maxAngle=300,
-        startAngle=0
-    )
-
-    xServo = ContinuousServoController(
-        servoPin=X_SERVO_PIN
-    )
-
-    yServo = ContinuousServoController(
-        servoPin=Y_SERVO_PIN
-    )
+    global claw, clawLift, xServo, yServo, xSwitches, ySwitches, joystick, display
 
     xSwitches = LimitSwitchController(pi, X_SWITCH_PINS)
     ySwitches = LimitSwitchController(pi, Y_SWITCH_PINS)
 
-    joystick = JoystickController()
+    claw = ServoController(servoPin=CLAW_PIN, maxAngle=300, startAngle=0)
+    clawLift = ServoController(servoPin=CLAW_LIFT_PIN, maxAngle=300, startAngle=0)
 
+    xServo = ContinuousServoController(servoPin=X_SERVO_PIN, limitSwitches=[xSwitches])
+    yServo = ContinuousServoController(servoPin=Y_SERVO_PIN, limitSwitches=[ySwitches])
+
+    joystick = JoystickController()
     display = DisplayController()
 
 # Claw Commands
 def clawResetPos():
-    axes = {"x": [xServo, xSwitches, False], "y": [yServo, ySwitches, False]}
     try:
-        for servo, switches, done in axes.values():
-            servo.setSpeed(1)
-        while not all(axis[2] for axis in axes.values()):
-            for axis in axes.values():
-                servo, switches, done = axis
-                if not done and switches.pressed():
-                    servo.setSpeed(0)
-                    axis[2] = True
+        while not (xSwitches.pressed() and ySwitches.pressed()):
+            xServo.setSpeed(1)
+            yServo.setSpeed(1)
             time.sleep(UPDATE_RATE)
     finally:
-        xServo.setSpeed(0)
-        yServo.setSpeed(0)
+        xServo.stop()
+        yServo.stop()
 
 def clawUp(): clawLift.setPosition(0)
-def clawDown(): clawLift.setPosition(300)
-def clawOpen(): clawLift.setPosition(0)
-def clawClose(): clawLift.setPosition(300)
+def clawDown(): clawLift.setPosition(285)
+def clawOpen(): claw.setPosition(160)
+def clawClose(): claw.setPosition(200)
 
 # Game Functions
+
 def setupGame():
-    clawLift.setPosition(0)
-    claw.setPosition(0)
+    clawUp()
+    time.sleep(4)
+    clawClose()
     clawResetPos()
-    display.showText("Press to play")
+    display.showText("Ready to play")
+
+def waitForStart():
+    while not joystick.isPressed():
+        time.sleep(UPDATE_RATE)
+    while joystick.isPressed():
+        time.sleep(UPDATE_RATE)
+
+def collect():
+    xServo.stop()
+    yServo.stop()
+    
+    clawOpen()
+    clawDown()
+    time.sleep(8)
+    clawClose()
+    time.sleep(0.5)
+    clawUp()
+    clawResetPos()
+    clawOpen()
 
 def playGame():
-    buttonPressed = False
+    endTime = time.monotonic() + PLAY_TIME
+    lastSeconds = None
 
-    while (not buttonPressed):
+    while True:
+        timeRemaining = endTime - time.monotonic()
+        seconds = int(timeRemaining)
+        
+        if seconds != lastSeconds:
+            display.showText(str(seconds) + "s Remaining")
+            lastSeconds = seconds
+
         x, y, pressed = joystick.readAll()
         xServo.setSpeed(-x)
         yServo.setSpeed(y)
 
-        if (pressed):
-            xServo.stop()
-            yServo.stop()
-            
-            clawDown()
-            time.sleep(5)
-            clawClose()
-            time.sleep(0.5)
-            clawUp()
-            clawResetPos()
-            clawOpen()
-
-            buttonPressed = True
+        if pressed or timeRemaining <= 0:
+            display.showText("Collecting...")
+            collect()
+            break
 
         time.sleep(UPDATE_RATE)
 
@@ -125,8 +126,9 @@ def playGame():
 try:
     initHardware()
 
-    while True:
+    while (True):
         setupGame()
+        waitForStart()
         playGame()
 
 finally:
